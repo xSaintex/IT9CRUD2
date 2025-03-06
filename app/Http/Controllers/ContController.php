@@ -12,13 +12,13 @@ class ContController extends Controller
     public function index(): View
     {
         return view('contacts.index', [
-            'contacts' => Cont::latest()->get(),
+            'contacts' => Cont::with('user')->latest()->get(),
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:conts,email',
             'phone' => 'required|string|max:20',
@@ -26,48 +26,44 @@ class ContController extends Controller
         ]);
     
         if (!auth()->check()) {
-            return redirect()->route('contacts.index')->with('error', 'You must be logged in to add a contact.');
+            return response()->json(['error' => 'You must be logged in to add a contact.'], 403);
+        }
+        $validated['user_id'] = $request->user()->id;
+    
+        $contact = Cont::create($validated);
+    
+        if ($request->headers->has('HX-Request')) {
+            return view('partials.contacts_row', ['contact' => $contact]);
         }
     
-        Cont::create([
-            'user_id' => auth()->id(),
-            'name' => $request->name,
-            'email' => $request->email,
-            'phone' => $request->phone,
-            'address' => $request->address,
-        ]);
-    
-        return redirect()->route('contacts.index')->with('success', 'Contact added successfully!');
+        return redirect(route('contacts.index'))->with('success', 'Contact created successfully!');
     }
-    
     
     public function edit(Cont $contact): View
     {
         return view('contacts.edit', compact('contact'));
     }
 
-    public function update(Request $request, Cont $contact): RedirectResponse
+    public function update(Request $request, $id)
     {
-        $request->validate([
+        $contact = Cont::findOrFail($id);
+        $contact->update($request->all());
+        
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:conts,email,' . $contact->id,
             'phone' => 'required|string|max:20',
             'address' => 'required|string|max:500',
         ]);
-
-        $contact->update([
-            'name' => $request->name,
-            'email' => $request->email,
-            'phone' => $request->phone,
-            'address' => $request->address,
-        ]);
-
-        return redirect()->route('contacts.index')->with('success', 'Contact updated successfully!');
+    
+        $contact->update($validated);
+    
+        return redirect()->route('contacts.index');
     }
 
-    public function destroy(Cont $contact): RedirectResponse
+    public function destroy(Cont $contact)
     {
         $contact->delete();
-        return redirect()->route('contacts.index')->with('success', 'Contact deleted successfully!');
+        return response('', 200);
     }
 }
